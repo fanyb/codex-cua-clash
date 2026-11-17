@@ -24,21 +24,17 @@ internal static class NodeReplProxy
             var start = new ProcessStartInfo(executable, String.Join(" ", Array.ConvertAll(args, QuoteArgument)));
             start.UseShellExecute = false;
             start.CreateNoWindow = true;
-            start.RedirectStandardInput = true;
+            // Inherit stdin directly. .NET Framework's redirected input writer may prepend a BOM.
             start.RedirectStandardOutput = true;
             start.RedirectStandardError = true;
             SetProxyForBrowser(start);
 
             using (Process child = Process.Start(start))
             {
-                Task stdin = ForwardInput(Console.OpenStandardInput(), child.StandardInput.BaseStream);
                 Task stdout = child.StandardOutput.BaseStream.CopyToAsync(Console.OpenStandardOutput());
                 Task stderr = child.StandardError.BaseStream.CopyToAsync(Console.OpenStandardError());
                 child.WaitForExit();
                 Task.WaitAll(stdout, stderr);
-                // A child may exit before the caller closes its input pipe.
-                if (stdin.IsCompleted)
-                    stdin.GetAwaiter().GetResult();
                 return child.ExitCode;
             }
         }
@@ -64,15 +60,6 @@ internal static class NodeReplProxy
         string allowlist = env["NODE_REPL_UNTRUSTED_ENV_ALLOWLIST"];
         env["NODE_REPL_UNTRUSTED_ENV_ALLOWLIST"] = (String.IsNullOrEmpty(allowlist) ? "" : allowlist + ",")
             + "HTTPS_PROXY,https_proxy,NO_PROXY,no_proxy,NODE_USE_ENV_PROXY";
-    }
-
-    private static async Task ForwardInput(Stream input, Stream childInput)
-    {
-        using (childInput)
-        {
-            try { await input.CopyToAsync(childInput).ConfigureAwait(false); }
-            catch (IOException) { } // The child can close stdin when it exits.
-        }
     }
 
     private static string QuoteArgument(string argument)
