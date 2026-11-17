@@ -31,11 +31,14 @@ internal static class NodeReplProxy
 
             using (Process child = Process.Start(start))
             {
-                ForwardInput(Console.OpenStandardInput(), child.StandardInput.BaseStream);
+                Task stdin = ForwardInput(Console.OpenStandardInput(), child.StandardInput.BaseStream);
                 Task stdout = child.StandardOutput.BaseStream.CopyToAsync(Console.OpenStandardOutput());
                 Task stderr = child.StandardError.BaseStream.CopyToAsync(Console.OpenStandardError());
                 child.WaitForExit();
                 Task.WaitAll(stdout, stderr);
+                // A child may exit before the caller closes its input pipe.
+                if (stdin.IsCompleted)
+                    stdin.GetAwaiter().GetResult();
                 return child.ExitCode;
             }
         }
