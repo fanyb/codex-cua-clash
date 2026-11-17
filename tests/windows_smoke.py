@@ -12,7 +12,11 @@ INSTALLER = [*POWERSHELL, "-File", str(ROOT / "setup-windows.ps1")]
 
 
 def run(*args, **kwargs):
-    return subprocess.run(args, check=True, capture_output=True, timeout=30, **kwargs)
+    result = subprocess.run(args, capture_output=True, timeout=30, **kwargs)
+    if result.returncode:
+        raise RuntimeError((args, result.returncode, result.stdout.decode(errors="replace"),
+                            result.stderr.decode(errors="replace")))
+    return result
 
 
 def check_runtime(wrapper, runtime, port):
@@ -60,7 +64,7 @@ class Probe {
         "NODE_REPL_NODE_PATH": str(runtime / "node.exe"),
     }}}}), encoding="ascii")
     # The isolated configuration is supplied only to the installer on the ephemeral CI runner.
-    # It leaves the actual user profile and Codex fixture paths out of the test.
+    # It keeps the test configuration outside the user's real Codex directory.
     installer = root / "setup-windows.ps1"
     source = (ROOT / "setup-windows.ps1").read_text(encoding="ascii")
     installer.write_text(source.replace("$env:CODEX_HOME", "$env:CUA_CLASH_TEST_CODEX_ROOT"), encoding="ascii")
